@@ -8,7 +8,7 @@ const options = {
 
 describe("EmberBackend", () => {
   it("uses configured room-scoped bot API to post", async () => {
-    const fetcher = vi.fn(async () => new Response(null, {
+    const fetcher = vi.fn(async (_url: string | URL | Request) => new Response(null, {
       status: 201,
       headers: { Location: "https://ember.example.com/rooms/room1/@message1" },
     }));
