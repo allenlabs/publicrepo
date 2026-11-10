@@ -1,0 +1,21 @@
+{
+  "name": "@allenlabs/chat-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "build": "wrangler deploy --dry-run --outdir dist",
+    "db:local": "wrangler d1 migrations apply DB --local",
+    "db:remote": "wrangler d1 migrations apply DB --remote"
+  },
+  "dependencies": {
+    "@allenlabs/chat-contracts": "workspace:*",
+    "@allenlabs/chat-core": "workspace:*",
+    "@allenlabs/adapter-d1": "workspace:*",
+    "@allenlabs/api-slack": "workspace:*",
+    "@allenlabs/adapter-slack": "workspace:*",
+    "@allenlabs/adapter-mattermost": "workspace:*",
+    "@allenlabs/adapter-ember": "workspace:*"
+  }
+}
