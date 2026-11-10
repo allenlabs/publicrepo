@@ -1,0 +1,14 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "allenlabs-chat-platform",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-01",
+  "observability": { "enabled": true },
+  "vars": { "CHAT_BACKEND": "d1", "CHAT_ACTOR_ID": "U_GATEWAY" },
+  "d1_databases": [{
+    "binding": "DB",
+    "database_name": "allenlabs-chat-platform",
+    "database_id": "00000000-0000-0000-0000-000000000000",
+    "migrations_dir": "migrations"
+  }]
+}

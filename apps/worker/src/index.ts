@@ -1,0 +1,128 @@
+import { D1Backend, type D1Like } from "@allenlabs/adapter-d1";
+import { ChatError, type ChatBackend, type Principal } from "@allenlabs/chat-contracts";
+import { ChatService } from "@allenlabs/chat-core";
+import { handleSlackApi } from "@allenlabs/api-slack";
+
+export interface Env {
+  DB?: D1Like;
+  CHAT_BACKEND?: string;
+  CHAT_API_TOKEN?: string;
+  CHAT_ACTOR_ID?: string;
+  SLACK_BOT_TOKEN?: string;
+  MATTERMOST_URL?: string;
+  MATTERMOST_TOKEN?: string;
+  MATTERMOST_TEAM_ID?: string;
+}
+
+const json = (value: unknown, status = 200): Response =>
+  Response.json(value, { status, headers: { "Cache-Control": "no-store" } });
+
+async function allowed(request: Request, expected?: string): Promise<boolean> {
+  const bearer = /^Bearer (.+)$/i.exec(request.headers.get("authorization") ?? "")?.[1];
+  if (!bearer || !expected) return false;
+  const encoder = new TextEncoder();
+  const [left, right] = await Promise.all([
+    crypto.subtle.digest("SHA-256", encoder.encode(bearer)),
+    crypto.subtle.digest("SHA-256", encoder.encode(expected)),
+  ]);
+  const a = new Uint8Array(left);
+  const b = new Uint8Array(right);
+  let difference = 0;
+  for (let i = 0; i < a.length; i++) difference |= a[i]! ^ b[i]!;
+  return difference === 0;
+}
+
+function buildBackend(env: Env): ChatBackend {
+  const backend = env.CHAT_BACKEND ?? "d1";
+  if (backend === "d1") {
+    if (!env.DB) throw new ChatError("backend_error", "D1 is not configured", 503);
+    return new D1Backend(env.DB);
+  }
+  throw new ChatError("backend_error", "Unknown chat backend: " + backend, 503);
+}
+
+function parseLimit(value: string | null): number | undefined {
+  if (value === null) return undefined;
+  if (value.trim() === "") throw new ChatError("invalid_arguments", "Invalid limit");
+  return Number(value);
+}
+
+async function handle(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url);
+  if (url.pathname === "/health" && request.method === "GET") {
+    return json({ status: "ok", backend: env.CHAT_BACKEND ?? "d1" });
+  }
+  if (!await allowed(request, env.CHAT_API_TOKEN)) {
+    if (url.pathname.startsWith("/api/")) return json({ ok: false, error: "invalid_auth" }, 401);
+    return json({ error: "unauthorized" }, 401);
+  }
+  const service = new ChatService(buildBackend(env));
+  const principal: Principal = { id: env.CHAT_ACTOR_ID ?? "U_GATEWAY" };
+
+  if (url.pathname.startsWith("/api/")) {
+    if ((env.CHAT_BACKEND ?? "d1") !== "d1") {
+      return json({ ok: false, error: "not_supported" }, 501);
+    }
+    return handleSlackApi(request, service, principal);
+  }
+
+  if (url.pathname === "/v1/conversations" && request.method === "GET") {
+    return json(await service.conversations(principal, {
+      cursor: url.searchParams.get("cursor") ?? undefined,
+      limit: parseLimit(url.searchParams.get("limit")),
+    }));
+  }
+  const match = /^\/v1\/conversations\/([^/]+)\/messages$/.exec(url.pathname);
+  if (match) {
+    let conversationId: string;
+    try {
+      conversationId = decodeURIComponent(match[1]!);
+    } catch {
+      throw new ChatError("invalid_arguments", "Invalid conversation ID");
+    }
+    if (request.method === "GET") {
+      return json(await service.history(principal, conversationId, {
+        cursor: url.searchParams.get("cursor") ?? undefined,
+        threadId: url.searchParams.get("thread_id") ?? undefined,
+        limit: parseLimit(url.searchParams.get("limit")),
+      }));
+    }
+    if (request.method === "POST") {
+      let body: unknown;
+      try { body = await request.json(); } catch {
+        throw new ChatError("invalid_arguments", "Invalid JSON body");
+      }
+      if (!body || typeof body !== "object" || Array.isArray(body)) {
+        throw new ChatError("invalid_arguments", "JSON object expected");
+      }
+      const value = body as Record<string, unknown>;
+      return json(await service.send(principal, {
+        conversationId,
+        text: value.text as string,
+        ...(typeof value.threadId === "string" ? { threadId: value.threadId } : {}),
+        ...(request.headers.get("Idempotency-Key")
+          ? { idempotencyKey: request.headers.get("Idempotency-Key")! }
+          : {}),
+      }), 201);
+    }
+  }
+  return json({ error: "not_found" }, 404);
+}
+
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    try {
+      return await handle(request, env);
+    } catch (error) {
+      if (error instanceof ChatError) {
+        if (new URL(request.url).pathname.startsWith("/api/")) {
+          return json({ ok: false, error: error.code }, error.status);
+        }
+        return json({ error: error.code, message: error.message }, error.status);
+      }
+      // Avoid exposing upstream response bodies, secrets, and stack traces.
+      console.error("Chat gateway request failed", error instanceof Error ? error.name : "unknown");
+      return json({ error: "internal_error" }, 500);
+    }
+  },
+};
