@@ -3,6 +3,7 @@ import { ChatError, type ChatBackend, type Principal } from "@allenlabs/chat-con
 import { AdapterRegistry, ChatService } from "@allenlabs/chat-core";
 import { SlackBackend } from "@allenlabs/adapter-slack";
 import { MattermostBackend } from "@allenlabs/adapter-mattermost";
+import { EmberBackend, type EmberRoom } from "@allenlabs/adapter-ember";
 import { handleSlackApi } from "@allenlabs/api-slack";
 
 export interface Env {
@@ -14,6 +15,8 @@ export interface Env {
   MATTERMOST_URL?: string;
   MATTERMOST_TOKEN?: string;
   MATTERMOST_TEAM_ID?: string;
+  EMBER_URL?: string;
+  EMBER_ROOMS_JSON?: string;
 }
 
 const json = (value: unknown, status = 200): Response =>
@@ -42,6 +45,19 @@ const registry = new AdapterRegistry<Env>()
   .register("slack", (env) => {
     if (!env.SLACK_BOT_TOKEN) throw new ChatError("backend_error", "SLACK_BOT_TOKEN is missing", 503);
     return new SlackBackend({ token: env.SLACK_BOT_TOKEN });
+  })
+  .register("ember", (env) => {
+    if (!env.EMBER_URL || !env.EMBER_ROOMS_JSON) {
+      throw new ChatError("backend_error", "Ember configuration is incomplete", 503);
+    }
+    let rooms: unknown;
+    try { rooms = JSON.parse(env.EMBER_ROOMS_JSON); } catch {
+      throw new ChatError("backend_error", "EMBER_ROOMS_JSON is malformed", 503);
+    }
+    if (!Array.isArray(rooms)) {
+      throw new ChatError("backend_error", "EMBER_ROOMS_JSON must be an array", 503);
+    }
+    return new EmberBackend({ baseUrl: env.EMBER_URL, rooms: rooms as EmberRoom[] });
   })
   .register("mattermost", (env) => {
     if (!env.MATTERMOST_URL || !env.MATTERMOST_TOKEN || !env.MATTERMOST_TEAM_ID) {

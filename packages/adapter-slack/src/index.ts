@@ -62,7 +62,7 @@ export class SlackBackend implements ChatBackend {
     this.fetcher = options.fetcher ?? fetch;
     this.apiUrl = (options.apiUrl ?? "https://slack.com/api/").replace(/\/?$/, "/");
     const base = new URL(this.apiUrl);
-    if (base.protocol !== "https:" && base.hostname !== "localhost" && base.hostname !== "127.0.0.1") {
+    if (base.protocol !== "https:" && !(base.protocol === "http:" && (base.hostname === "localhost" || base.hostname === "127.0.0.1"))) {
       throw new ChatError("invalid_arguments", "Slack API URL must use HTTPS");
     }
   }

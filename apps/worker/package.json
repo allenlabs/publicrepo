@@ -15,6 +15,7 @@
     "@allenlabs/adapter-d1": "workspace:*",
     "@allenlabs/api-slack": "workspace:*",
     "@allenlabs/adapter-slack": "workspace:*",
-    "@allenlabs/adapter-mattermost": "workspace:*"
+    "@allenlabs/adapter-mattermost": "workspace:*",
+    "@allenlabs/adapter-ember": "workspace:*"
   }
 }

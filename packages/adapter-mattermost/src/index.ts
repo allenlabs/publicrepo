@@ -61,7 +61,7 @@ export class MattermostBackend implements ChatBackend {
       throw new ChatError("backend_error", "Mattermost token and teamId required", 503);
     }
     const url = new URL(options.baseUrl);
-    if (url.protocol !== "https:" && url.hostname !== "localhost" && url.hostname !== "127.0.0.1") {
+    if (url.protocol !== "https:" && !(url.protocol === "http:" && (url.hostname === "localhost" || url.hostname === "127.0.0.1"))) {
       throw new ChatError("invalid_arguments", "Mattermost URL must use HTTPS");
     }
     this.baseUrl = url.origin + url.pathname.replace(/\/+$/, "");
@@ -135,12 +135,12 @@ export class MattermostBackend implements ChatBackend {
     }
     const data = await this.call<MattermostPostList>(
       "/channels/" + encodeURIComponent(conversationId) + "/posts?page=" +
-        page + "&per_page=" + (limit + 1),
+        page + "&per_page=" + limit,
     );
     const ordered = data.order.map((id) => data.posts[id]).filter((p): p is MattermostPost => !!p);
     return {
       items: ordered.slice(0, limit).map(mapPost),
-      ...(ordered.length > limit ? { nextCursor: String(page + 1) } : {}),
+      ...(ordered.length === limit ? { nextCursor: String(page + 1) } : {}),
     };
   }
 
