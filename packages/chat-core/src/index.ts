@@ -11,6 +11,29 @@ import {
   type Principal,
 } from "@allenlabs/chat-contracts";
 
+/** Register backends at the composition root; domain code never imports providers. */
+export class AdapterRegistry<Config> {
+  private readonly factories = new Map<string, (config: Config) => ChatBackend>();
+
+  register(id: string, factory: (config: Config) => ChatBackend): this {
+    if (!id || this.factories.has(id)) {
+      throw new ChatError("invalid_arguments", "Adapter id is missing or already registered: " + id);
+    }
+    this.factories.set(id, factory);
+    return this;
+  }
+
+  create(id: string, config: Config): ChatBackend {
+    const factory = this.factories.get(id);
+    if (!factory) throw new ChatError("unsupported", "Unknown chat backend: " + id, 503);
+    return factory(config);
+  }
+
+  names(): string[] {
+    return [...this.factories.keys()];
+  }
+}
+
 /**
  * Small application service. Deliberately knows nothing about Slack, Mattermost,
  * Cloudflare or Ember. Backend implementations MUST enforce resource permissions.

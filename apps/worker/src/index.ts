@@ -1,6 +1,8 @@
 import { D1Backend, type D1Like } from "@allenlabs/adapter-d1";
 import { ChatError, type ChatBackend, type Principal } from "@allenlabs/chat-contracts";
-import { ChatService } from "@allenlabs/chat-core";
+import { AdapterRegistry, ChatService } from "@allenlabs/chat-core";
+import { SlackBackend } from "@allenlabs/adapter-slack";
+import { MattermostBackend } from "@allenlabs/adapter-mattermost";
 import { handleSlackApi } from "@allenlabs/api-slack";
 
 export interface Env {
@@ -32,13 +34,28 @@ async function allowed(request: Request, expected?: string): Promise<boolean> {
   return difference === 0;
 }
 
-function buildBackend(env: Env): ChatBackend {
-  const backend = env.CHAT_BACKEND ?? "d1";
-  if (backend === "d1") {
+const registry = new AdapterRegistry<Env>()
+  .register("d1", (env) => {
     if (!env.DB) throw new ChatError("backend_error", "D1 is not configured", 503);
     return new D1Backend(env.DB);
-  }
-  throw new ChatError("backend_error", "Unknown chat backend: " + backend, 503);
+  })
+  .register("slack", (env) => {
+    if (!env.SLACK_BOT_TOKEN) throw new ChatError("backend_error", "SLACK_BOT_TOKEN is missing", 503);
+    return new SlackBackend({ token: env.SLACK_BOT_TOKEN });
+  })
+  .register("mattermost", (env) => {
+    if (!env.MATTERMOST_URL || !env.MATTERMOST_TOKEN || !env.MATTERMOST_TEAM_ID) {
+      throw new ChatError("backend_error", "Mattermost configuration is incomplete", 503);
+    }
+    return new MattermostBackend({
+      baseUrl: env.MATTERMOST_URL,
+      token: env.MATTERMOST_TOKEN,
+      teamId: env.MATTERMOST_TEAM_ID,
+    });
+  });
+
+function buildBackend(env: Env): ChatBackend {
+  return registry.create(env.CHAT_BACKEND ?? "d1", env);
 }
 
 function parseLimit(value: string | null): number | undefined {
