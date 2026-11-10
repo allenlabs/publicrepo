@@ -121,9 +121,14 @@ export class EmberBackend implements ChatBackend {
     const link = response.headers.get("Link") ?? "";
     const nextLink = /<([^>]+)>;\s*rel="next"/.exec(link)?.[1];
     const next = nextLink ? new URL(nextLink, this.origin).searchParams.get("before") : null;
+    // Ember's fixed-size bot pages are chronological (oldest first).
+    // Return the most recent requested items and cursor from the oldest one
+    // to avoid skipping records when caller limit is smaller than Ember's page.
+    const selected = messages.slice(-limit);
+    const nextCursor = messages.length > limit ? selected[0]?.id : next;
     return {
-      items: messages.slice(0, limit).map(convert),
-      ...(next && messages.length <= limit ? { nextCursor: next } : {}),
+      items: selected.map(convert),
+      ...(nextCursor ? { nextCursor } : {}),
     };
   }
 
