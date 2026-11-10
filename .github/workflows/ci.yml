@@ -19,14 +19,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: pnpm
       - name: Install
-        run: pnpm install --no-frozen-lockfile
-      - name: Bootstrap reproducible dependency lockfile
-        run: |
-          echo "BEGIN_PNPM_LOCKFILE"
-          base64 -w0 pnpm-lock.yaml
-          echo
-          echo "END_PNPM_LOCKFILE"
+        run: pnpm install --frozen-lockfile
       - name: Typecheck, unit tests and Worker bundle
         run: pnpm check
       - name: Local D1 integration smoke test
